@@ -9,23 +9,49 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; recon-tool/1.0)"}
 
 
 def links(html):
+    import re
     soup = BeautifulSoup(html, "html.parser")
 
-    links = []
+    found_links = []
 
-    # pegar <a href="">
     for tag in soup.find_all("a"):
         href = tag.get("href")
         if href and not href.startswith(("#", "mailto:", "javascript:")):
-            links.append(href)
+            found_links.append(href)
 
-    # pegar <form action="">
     for tag in soup.find_all("form"):
         action = tag.get("action")
         if action and not action.startswith(("#", "mailto:", "javascript:")):
-            links.append(action)
+            found_links.append(action)
 
-    return list(set(links))
+    found_links = list(set(found_links))
+    return found_links
+
+
+def extrair_hosts(links_list):
+    import re
+    hosts = set()
+
+    for link in links_list:
+        match = re.search(r"//([^/?#]+)", link)
+        if match:
+            hosts.add(match.group(1))
+
+    return list(hosts)
+
+
+def verificar_hosts(hosts):
+    ativos = []
+
+    for host in hosts:
+        try:
+            ip = socket.gethostbyname(host)
+            print(f"[+] {host} -> {ip}")
+            ativos.append({"host": host, "ip": ip})
+        except socket.gaierror:
+            pass
+
+    return ativos
 
 
 def lista(domain, wordlist):
